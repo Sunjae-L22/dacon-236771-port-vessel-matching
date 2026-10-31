@@ -1,0 +1,1 @@
+import sys,inspect;sys.path.insert(0,sys.argv[1]);from trace_hooks import load_entry;m=load_entry(sys.argv[2]);k='output_path' if 'output_path' in inspect.signature(m.run).parameters else 'out';m.run(test_path=sys.argv[3],catalog_path=sys.argv[4],**{k:sys.argv[5]})

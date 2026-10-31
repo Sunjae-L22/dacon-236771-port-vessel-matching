@@ -1,0 +1,1 @@
+import sys;sys.path.insert(0,sys.argv[1]);from trace_hooks import run_child;run_child(*sys.argv[2:])
