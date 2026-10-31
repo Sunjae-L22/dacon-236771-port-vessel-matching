@@ -355,3 +355,32 @@
 - 10/31 LB 110 = 0.943471206 = 한글493(+1)·영문3506, 새 최고. 퍼지 후보 이식 효과 +1. 남은 큰 이득은 v18 한글(500) 결합(예상 0.95268) — v18 ZIP은 싸피 PC에 있어 11/01 오전 마감 전 결합 키트로 처리 예정.
 - 10/31 19:00 결합 키트(드라이브 combo_kit/, 사본 shared/experiments/combo_kit/): A = build_combo(v18 한글 + 93 영문, 예상 500/3506 = 0.9527), B = build_fuse(한글 행 중 110의 6모델 평균 점수차 ≥4인 행은 110, 나머지 v18; 102 실측 정밀도 371/373 → 최악 A−2행). check_combo.py = 3,000행 실행·영문 93 일치·600행 행 독립성. 93을 v18 대역으로 넣은 리허설: A 122초, B 159초, 영문 차이 0, 불일치 0. v18은 CUDA 필요 → 싸피 PC 또는 Colab(3_combo_colab.ipynb)에서 실행.
 - 10/31 19:10 카탈로그 한글 표기(오프라인 대형 LLM) 착수: 드라이브 catalog_ko/4_catalog_ko.ipynb(vLLM, Qwen2.5-72B-Instruct-AWQ(GPU>70GB) 또는 32B-AWQ, train 실제 한영 40쌍 few-shot, 고유 이름 78,594개 × greedy 1 + 샘플 3). `shared/src/kocat.py` = 자모 단위 Indel 검색·후보별 유사도, `opus/stage2/kocat_probe.py` = (real) few-shot 제외 train 실제 한글명 342개 이름만 검색 R@k, (fold) 110 후보 + KoCat 상위 50/200 + 랭커 점수에 w·유사도(1/2/4/8). `shared/experiments/build_112_kocat.py NUM TABLE K W`(모의 표로 3,000행 128초·불일치0 확인).
+
+
+## Astra 2026-10-31 19:59 KST — 감사 및 C1/C2 재시험 (제출 없음)
+
+- 사용자 명시 범위: 기준110, Astra는 음절 노이즈 재학습(a)·hard 규칙(c); Opus의112/kocat 및v18 combo/fuse 수정·실행 금지.
+- 감사표·상위5개·사전 K범위는 `astra/msg/005_20261031-1935_audit-and-preregister.md`. 102 분모373/159는 추정,108 K12는93 전체top2,105 버그로66/69 독립 근거까지 무효화하지 않음.
+- C1/C2 고정 .15 규칙 결과: fold2(6모델) noise net0/+2, fold4(1모델)−4/−3. clean 훼손은474/460조건 모두0. fold간 모델 수가 달라 합산 성능으로 쓰지 않음.
+- C2 QA ZIP `astra/builds/astra110_second_name_20261031.zip`: local3000행293.9초,subset600 불일치0;110 대비 한글29·영문0변경;easy0·scope밖0;별도6회 행순서/단독 실행 불일치0. 기존payload25개동일.
+- **C2 제출 보류**: 이득 미재현. 상세·SHA는 `astra/msg/006_20261031-1955_second-name-hold.md`. 실행 QA 통과와 성능 추천을 구분. 제출 횟수 소모0.
+- (a) `astra/noise113/`에서 원래 학습 블록·6시드·60피처·600트리를 보존한 재학습 진행. 새 블록만 음절 삭제/중복/인접교환 + 톤수결측,110 wide candidates. GPU/Opus 영역 미사용.
+- 10/31 20:00 방향 상향: 72B 카탈로그 한글 표기는 test 선박 자체를 포함하므로, 후보 추가가 아니라 **랭커 피처(kc_sim, kc_margin)로 재학습**하는 것이 본 실험. `opus/stage2/train_kocat.py FOLD TABLE [K]`(incumbent97 seed0 캐시 블록 + kc 2열, llm 블록은 NaN, 600트리; 평가 = 110 후보(+KoCat top-K), few-shot 40척 제외). 제출용 레시피 `pinned/build113`(= build70 + kc 피처, KOCAT_TABLE 환경변수), 조립 `shared/experiments/build_113_kocat_rank.py`. 모의 표로 fold0 학습 행렬 (4,003,960 × 62) 생성 확인.
+- 10/31 20:26 72B 카탈로그 한글 표기 완료(78,594 이름 × greedy+3샘플, shared/kocat/out/catalog_ko.csv, git 제외). 실제 train 한글명 342개(few-shot 제외) 이름만 7.8만 척 검색: **R@1 .939, R@10 .982**, R@100 .988 (예전 소형 LLM 색인 top1 .87~.90).
+- 10/31 20:40 kc 피처 재학습 fold 검증(`train_kocat.py`, 5-fold, 한글 1058행, few-shot 선박 제외, 110 후보 + KoCat top50): 깨끗 1054→1054(0), 음절오타+톤수유지 933→931(−2), **음절오타+톤수없음 616→673(+57)**, 음절오타+톤±15% 736→753(+17), **자모2+톤수없음 955→1018(+63)**. 통과 → build113 전체 재학습(오프셋 0/5000 × 3시드, 20:27 시작).
+
+
+## Astra 2026-10-31 20:50 KST — A2 후보1개 학습·빌드·QA 완료 (직접 제출0)
+
+- 최종인계: `astra/msg/009_20261031-2050_A2-ready-final-handoff.md`. 감사005,규칙기각006,A2범위등록007,A3학습량등록008.
+- A1(3사본,hard전체): fold2 6모델noise+45지만clean손해4라기각. A3(1사본,hard전체): fold2 noise+28/clean손해4,fold4 1모델noise+4/clean손해0라기각. 손해있는clean행을이름예외로숨기지않음.
+- **A2 채택:** 110의평균margin<4이고유효톤수가있는한글만새6모델로선택. 두톤수결측/easy/영문은110보존. fold2(6모델)clean474조건손해0,noise1896조건+8(8/0);fold4(1모델)clean460조건손해0,noise1840조건+4(5/1). 개발fold재사용·서로다른모델수·Public미확인명시.
+- 원래6시드/60피처/600트리/전체학습블록보존. 전체모델당30515+3573=34088질의. 기존25payload바이트동일;기존파일중script.py만변경하고helper1개/새모델6개추가.
+- ZIP: `astra/builds/astra110_noise_with_tonnage_20261031.zip`(45,014,261bytes). SHA256 `5cb0d1cb4e71b8e26d1c7cf2f9e302c1aa92d3b9d07ec0a02fe2105bb775ebe8`.
+- QA: local3000행321.2초,subset600불일치0,110대비한글44/영문0변경,easy16중0/결측55중0/scope밖0. trace baseline과원본110출력3000행일치. 교차/역순/단독4행등별도6회실행불일치0. 수치는로컬손상train이며Public변경수아님.
+- A2사전K492~500(중심495~497),E3506유지가설. Public연결은v15~v18음절오타검색상승+110후보확대,102불확실구간보호,108top2한계. 재학습Public개선은미확인이고K493이하면향상실패.
+- Opus112/kocat·v18combo/fuse·G4미사용. 사용자확인으로G4는Opus사용중이라(a)/(c)에집중. submissions/ 및공식데이터변경없음;입력8개해시최종재확인.
+- A3중복seed6000실행은같은모델SHA를재생성했지만matrix정리FileNotFoundError로coordinator실패. 완료모델6개해시/트리/질의수는직접검증했고A3기각. A2전체학습·최종QA는정상완료.
+- 10/31 21:00 Astra A2 검토(스크립트·astra_decision.py 확인: 행별 순수 함수, 110 gap으로 hard 판정, 쉬운 행·톤수결측 불변 assert) → 111로 번호 부여.
+- 10/31 LB 111(Astra A2) = 0.9395238376 = 한글490(−3 vs 110)·영문3506. 톤수 있는 hard 행에서 음절 노이즈 재학습 랭커는 110보다 나쁨. 합성 노이즈 재학습이 Public으로 안 옮겨진 또 하나의 사례(99·107·111).
+- 10/31 21:40 HanSunwook 파이프라인(github HanSunwook/vessel-analysis-project) 해독표: 1031_08_hyb_w = 한글495·영문3490 (오답 중 후보누락 20%, 자매선+오타 위주; 퍼지 후보는 그쪽에서 −2). 3자 한글 투표 `shared/experiments/build_vote.py` (영문·110확신행=110, 나머지 2/3 일치, 전부 다르면 v18). 93 대역 리허설 통과(3,000행 244초, 영문 차이0, 불일치0). HanSunwook 제출 ZIP(model.pkl 포함) 필요.

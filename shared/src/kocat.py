@@ -77,3 +77,20 @@ class KoCat:
                 if len(out) == k:
                     break
         return out
+
+
+KC_FEATURES = ["kc_sim", "kc_margin"]
+
+
+def kc_features(kc, name, idx):
+    """[kc_sim, kc_margin] per candidate; NaN for non-Korean names (same as opus/stage2/train_kocat.py)."""
+    name = unicodedata.normalize("NFC", str(name or ""))
+    if not any("가" <= c <= "힣" for c in name):
+        return np.full((len(idx), 2), np.nan, np.float32)
+    s = kc.sim(name, idx)
+    if len(s) > 1:
+        top2 = np.sort(s)[-2:]
+        other = np.where(s >= top2[1], top2[0], top2[1])
+    else:
+        other = np.zeros_like(s)
+    return np.column_stack([s, s - other]).astype(np.float32)
