@@ -50,6 +50,12 @@ def run_child(script,test,catalog,output):
     if pkg=='ko':
         sys.path.insert(0,str(Path(script).resolve().parent/'model'))
         attach_neural_trace(stage/'v20_candidates.jsonl')
+        from src.encoder_views import EncoderViewsEnsemble
+        from neural_rescue import install_capture
+        excluded=set(json.loads((Path(script).resolve().parent/'model/train_vessels.json').read_text()))
+        def emit(record):
+            with (stage/'v20_packets_partial.jsonl').open('a',encoding='utf-8') as f:f.write(json.dumps(record,ensure_ascii=False,allow_nan=False)+'\n')
+        install_capture(EncoderViewsEnsemble,excluded,emit)
     m=load_entry(script);ps=inspect.signature(m.run).parameters
     restore=lambda:None
     if pkg=='hs':restore=attach_hsw_trace(stage/'hs_candidates.jsonl')

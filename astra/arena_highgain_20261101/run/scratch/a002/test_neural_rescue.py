@@ -8,6 +8,8 @@ import random
 import sys
 import tempfile
 import unittest
+import types
+import unicodedata
 from unittest import mock
 sys.dont_write_bytecode = True
 import numpy as np
@@ -39,6 +41,23 @@ def fixture(n=100):
 
 
 class Checks(unittest.TestCase):
+    def diagnose_fixture(self, packets, results, status_override=None):
+        import diagnose
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent/'tmp') as tmp:
+            root=Path(tmp)
+            for name,rows in [('packets',packets),('results',results)]:
+                (root/(name+'.jsonl')).write_text(''.join(json.dumps(p)+'\n' for p in rows))
+            (root/'truth.csv').write_text('sample_id,target_vessel_id\nS1,C064\n')
+            status={'state':'COMPLETE','rows':len(packets),
+                    'packets_sha256':hashlib.sha256((root/'packets.jsonl').read_bytes()).hexdigest(),
+                    'results_sha256':hashlib.sha256((root/'results.jsonl').read_bytes()).hexdigest()}
+            status.update(status_override or {})
+            (root/'results.status.json').write_text(json.dumps(status))
+            argv=['diagnose.py','--packets',str(root/'packets.jsonl'),'--results',str(root/'results.jsonl'),
+                  '--truth',str(root/'truth.csv'),'--output',str(root/'diagnosis.json')]
+            with mock.patch.object(sys,'argv',argv): diagnose.main()
+            return json.loads((root/'diagnosis.json').read_text())
+
     def test_positive_outside_top20_and_skipped_base(self):
         p, cat = fixture()
         out = nr.run_one(p, cat, Scores(), Scores())
@@ -94,7 +113,11 @@ class Checks(unittest.TestCase):
         for key in ('ids', 'base', 'post'):
             p[key] = [p[key][j] for j in order]
         p['signals'] = {k: [v[j] for j in order] for k, v in p['signals'].items()}
-        self.assertEqual(ref, nr.run_one(p, cat, Scores(), Scores()))
+        reordered = nr.run_one(p, cat, Scores(), Scores())
+        self.assertNotEqual(ref['packet_sha256'], reordered['packet_sha256'])
+        # Prediction and scores are invariant; provenance binds exact input order.
+        self.assertEqual({k:v for k,v in ref.items() if k!='packet_sha256'},
+                         {k:v for k,v in reordered.items() if k!='packet_sha256'})
 
     def test_row_order_and_subset(self):
         p, cat = fixture()
@@ -158,21 +181,93 @@ class Checks(unittest.TestCase):
             nr.run_one(p, cat, Scores(), Scores())
 
     def test_diagnosis_rejects_zero_mass_before_arithmetic(self):
-        import diagnose
         p, cat = fixture()
         result=nr.run_one(p,cat,Scores(),Scores())
         p['base']=[0.0]*len(p['ids'])
-        with tempfile.TemporaryDirectory(dir=Path(__file__).parent/'tmp') as tmp:
-            root=Path(tmp)
-            (root/'packets.jsonl').write_text(json.dumps(p)+'\n')
-            (root/'results.jsonl').write_text(json.dumps(result)+'\n')
-            (root/'truth.csv').write_text('sample_id,target_vessel_id\nS1,C064\n')
-            argv=['diagnose.py','--packets',str(root/'packets.jsonl'),'--results',str(root/'results.jsonl'),
-                  '--truth',str(root/'truth.csv'),'--output',str(root/'diagnosis.json')]
-            with mock.patch.object(sys,'argv',argv):
-                with self.assertRaisesRegex(ValueError,'probability mass'):
-                    diagnose.main()
-            self.assertFalse((root/'diagnosis.json').exists())
+        with self.assertRaisesRegex(ValueError,'probability mass'):
+            self.diagnose_fixture([p],[result])
+
+    def test_diagnosis_rejects_stale_results_and_noncomplete_status(self):
+        p,cat=fixture();result=nr.run_one(p,cat,Scores(),Scores())
+        stale=copy.deepcopy(p);stale['gap']=4
+        with self.assertRaisesRegex(ValueError,'exact packet'):
+            self.diagnose_fixture([stale],[result])
+        for override in ({'state':'ABORT'},{'packets_sha256':'bad'}, {'results_sha256':'bad'}, {'rows':2}):
+            with self.assertRaises(ValueError): self.diagnose_fixture([p],[result],override)
+
+    def test_diagnosis_rejects_duplicate_packets_and_results(self):
+        p,cat=fixture();result=nr.run_one(p,cat,Scores(),Scores())
+        for packets,results in [([p,p],[result]),([p],[result,result])]:
+            with self.assertRaisesRegex(ValueError,'Duplicate'):
+                self.diagnose_fixture(packets,results)
+
+    def test_diagnosis_verifies_original_router_and_protected_scope(self):
+        p,cat=fixture();result=nr.run_one(p,cat,Scores(),Scores())
+        bad=copy.deepcopy(result);bad['baseline']='C001'
+        with self.assertRaisesRegex(ValueError,'baseline'):
+            self.diagnose_fixture([p],[bad])
+        protected=copy.deepcopy(p);protected['gap']=4
+        bad=nr.run_one(protected,cat,Scores(),Scores());bad['v20_after']='C064'
+        with self.assertRaisesRegex(ValueError,'protected/out-of-scope'):
+            self.diagnose_fixture([protected],[bad])
+
+    def test_nfd_scope_has_consistent_diagnostic_ceiling(self):
+        p,cat=fixture();p['row']['vessel_name']=unicodedata.normalize('NFD',p['row']['vessel_name'])
+        result=nr.run_one(p,cat,Scores(),Scores())
+        report=self.diagnose_fixture([p],[result]);counts=report['counts']['unknown']
+        self.assertTrue(result['changed'])
+        self.assertEqual((counts['rescue'],counts['scope_error_ceiling'],counts['pool_error_ceiling']),(1,1,1))
+
+    def test_gpu_runner_deadline_without_scoring(self):
+        # Exercise actual main orchestration, with fake dependencies/clock only.
+        # No GPU accuracy or speed measurement is implied.
+        import run_gpu
+        p,cat=fixture();p['gap']=4
+        class Series:
+            def astype(self,*a):return self
+            def duplicated(self):return self
+            def any(self):return False
+        class Frame:
+            def __getitem__(self,key):return Series()
+            def to_dict(self,mode):return [dict(vessel_id=k,**v) for k,v in cat.items()]
+        pandas=types.ModuleType('pandas');pandas.read_csv=lambda *a,**k:Frame()
+        torch=types.ModuleType('torch');torch.__version__='fixture'
+        torch.version=types.SimpleNamespace(cuda='fixture')
+        torch.cuda=types.SimpleNamespace(is_available=lambda:True,get_device_name=lambda *a:'fixture',max_memory_allocated=lambda:0)
+        torch.set_num_threads=torch.set_num_interop_threads=torch.manual_seed=lambda x:None
+        for expire_at in ('load','after_row','rename'):
+            clock=[0.0]
+            class View:
+                def __init__(self,*a):
+                    if expire_at=='load':clock[0]=601.0
+                def score(self,*a):raise AssertionError('Protected row must not score')
+            views=types.ModuleType('src.encoder_views');views.ViewScorer=View
+            with tempfile.TemporaryDirectory(dir=Path(__file__).parent/'tmp') as tmp:
+                root=Path(tmp);model=root/'model';model.mkdir()
+                spec={'top_k':20,'weight':.25,'source_hashes':{},'views':[
+                    {'kind':'qwen','recipe':'evidence','weight':1.0},
+                    {'kind':'encoder','recipe':'phonetic','weight':1.0}]}
+                (model/'encoder_views.json').write_text(json.dumps(spec));(model/'train_vessels.json').write_text('[]')
+                (root/'packets.jsonl').write_text(json.dumps(p)+'\n');(root/'catalog.csv').write_text('fixture')
+                argv=['run_gpu.py','--model-root',str(model),'--packets',str(root/'packets.jsonl'),
+                      '--catalog',str(root/'catalog.csv'),'--output',str(root/'out.jsonl'),'--budget-seconds','600']
+                original_run=nr.run_one; original_rename=Path.rename
+                def run(*a,**k):
+                    result=original_run(*a,**k)
+                    if expire_at=='after_row':clock[0]=601.0
+                    return result
+                def rename(path,target):
+                    result=original_rename(path,target)
+                    if expire_at=='rename':clock[0]=601.0
+                    return result
+                modules={'pandas':pandas,'torch':torch,'src':types.ModuleType('src'),'src.encoder_views':views}
+                with mock.patch.dict(sys.modules,modules),mock.patch.object(sys,'argv',argv),\
+                     mock.patch.object(run_gpu.time,'monotonic',lambda:clock[0]),\
+                     mock.patch.object(nr,'run_one',run),mock.patch.object(Path,'rename',rename):
+                    with self.assertRaises(TimeoutError):run_gpu.main()
+                status=json.loads((root/'out.status.json').read_text())
+                self.assertEqual(status['state'],'ABORT')
+                self.assertFalse((root/'out.jsonl').exists())
 
     def test_disabled_no_change(self):
         p, cat = fixture()

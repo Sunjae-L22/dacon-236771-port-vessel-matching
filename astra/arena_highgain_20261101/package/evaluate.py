@@ -41,13 +41,15 @@ def evaluate(data,baseline,out,experiment=None,split='pilot'):
   elif y not in union:category='absent_all_traced_pools'
   elif y not in pool:category='absent_v20_present_other'
   elif y not in top:category='v20_below20'
-  elif a!=y:category='v20_top20_misranked'
+  elif a!=y:category='v20_top20_skipped' if t.get('neural_skipped') else 'v20_top20_neural_misranked'
   else:category='vote_overrode_correct_v20'
   r=dict(sample_id=sid,vessel_name=q['vessel_name'],truth=y,baseline=b,experiment=c,en=e['target_vessel_id'],v20=a,hs=h,gap110=gap,is_ko=ko,changed=c!=b,rescue=b!=y and c==y,harm=b==y and c!=y,variant=truth[sid]['variant'],source=truth[sid]['source'],category=category,truth_in_v20_pool=y in pool,truth_in_v20_top20=y in top,truth_in_union=y in union)
+  r['undo_cvote_repair_vs112']=bool(r['harm'] and e['target_vessel_id']!=y)
+  r['truth_in_top1_votes']=y in (e['target_vessel_id'],a,h)
   rows.append(r);counts[category]+=1
  for key in ['ALL','KOREAN','ENGLISH']+sorted({r['variant'] for r in rows})+sorted({r['source'] for r in rows}):
   rr=[r for r in rows if key=='ALL' or key=='KOREAN' and r['is_ko'] or key=='ENGLISH' and not r['is_ko'] or key in (r['variant'],r['source'])]
-  cohorts[key]={k:sum(int(r[k]) for r in rr) for k in ('changed','rescue','harm')};cohorts[key].update(rows=len(rr),baseline_correct=sum(r['baseline']==r['truth'] for r in rr),experiment_correct=sum(r['experiment']==r['truth'] for r in rr))
+  cohorts[key]={k:sum(int(r[k]) for r in rr) for k in ('changed','rescue','harm','undo_cvote_repair_vs112')};cohorts[key].update(rows=len(rr),unique_target_vessels=len({r['truth'] for r in rr}),rescued_unique_vessels=len({r['truth'] for r in rr if r['rescue']}),harmed_unique_vessels=len({r['truth'] for r in rr if r['harm']}),baseline_correct=sum(r['baseline']==r['truth'] for r in rr),experiment_correct=sum(r['experiment']==r['truth'] for r in rr))
  clean=[r for r in rows if r['variant'].startswith('clean')];wrong=[r for r in rows if r['is_ko'] and r['baseline']!=r['truth'] and r['gap110']<4]
  report=dict(evidence_class='SYNTHETIC_TABLE_SEEN_STYLE_BIASED',actual_C_vote_weights_and_router=True,independent_holdout=False,submission_eligible=False,public_gain_estimate=None,cohorts=cohorts,baseline_error_categories=dict(counts),clean_harm=sum(r['harm'] for r in clean),hard_wrong_truth_in_union=sum(r['truth_in_union'] for r in wrong),hard_wrong_rows=len(wrong),english_protected_changes=0,route_reconstruction_mismatch=0,note='Coverage is an oracle ceiling on these synthetic rows, not achievable gain or Public accuracy.')
  with (out/'paired_rows.csv').open('w',encoding='utf-8-sig',newline='') as f:w=csv.DictWriter(f,fieldnames=list(rows[0]));w.writeheader();w.writerows(rows)

@@ -5,6 +5,7 @@ sys.dont_write_bytecode=True
 HERE=Path(__file__).resolve().parent
 EXPECTED='601c71ab3bc87ee5128305261c1708c432eb75dca53258e4d3841cce813a97d3'
 CUTOFF=datetime.datetime(2026,10,31,22,tzinfo=datetime.timezone.utc).timestamp()
+RUN_DEADLINE=None
 
 def sha(path):
  h=hashlib.sha256()
@@ -14,15 +15,22 @@ def sha(path):
 def remaining():
  n=CUTOFF-time.time()
  if n<=0:raise RuntimeError('07:00 KST cutoff reached: no new experiment execution')
+ if RUN_DEADLINE is not None:
+  n=min(n,RUN_DEADLINE-time.monotonic())
+  if n<=0:raise RuntimeError('Whole diagnostic run exceeded 1800-second watchdog')
  return n
 def run(argv,cwd,log,cap=1800):
  seconds=min(remaining(),cap);started=time.monotonic()
+ receipt={'budget_seconds':seconds,'state':'STARTED','command':[str(x) for x in argv]}
  env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',PYTHONHASHSEED='0',OMP_NUM_THREADS='2',OPENBLAS_NUM_THREADS='2',MKL_NUM_THREADS='2',TOKENIZERS_PARALLELISM='false',HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1')
  with Path(log).open('w') as out:
   p=subprocess.Popen([str(x) for x in argv],cwd=cwd,env=env,stdout=out,stderr=subprocess.STDOUT,start_new_session=True)
-  try:rc=p.wait(timeout=seconds)
+  try:
+   rc=p.wait(timeout=seconds);receipt.update(state='COMPLETE' if rc==0 else 'FAILED',returncode=rc)
   except BaseException:
-   os.killpg(p.pid,signal.SIGKILL);p.wait();raise
+   os.killpg(p.pid,signal.SIGKILL);p.wait();receipt.update(state='INTERRUPTED_OR_TIMED_OUT',returncode=p.returncode);raise
+  finally:
+   receipt['elapsed_seconds']=time.monotonic()-started;Path(log).with_suffix('.stage.json').write_text(json.dumps(receipt,indent=2))
  if rc:raise RuntimeError(f'Failed stage {Path(log).name}, rc={rc}; see log')
  return time.monotonic()-started
 
@@ -46,6 +54,8 @@ def same_predictions(a,b):
  return int((x.loc[y.index,'target_vessel_id']!=y.target_vessel_id).sum())
 
 def main():
+ global RUN_DEADLINE
+ started=time.monotonic();RUN_DEADLINE=started+1800
  p=argparse.ArgumentParser();p.add_argument('--cvote',required=True);p.add_argument('--work',required=True);p.add_argument('--split',choices=['pilot','full'],default='pilot');a=p.parse_args()
  work=Path(a.work).resolve();work.mkdir(parents=True,exist_ok=False);out=work/'results';out.mkdir();timings={};status={'status':'RUNNING','public_submissions':0,'model_zip_created':False,'cutoff_utc':'2026-10-31T22:00:00Z','baseline_sha256':EXPECTED,'split':a.split,'evidence':'SYNTHETIC_TABLE_SEEN_STYLE_BIASED','independent_holdout':False,'submission_eligible':False}
  try:
@@ -67,6 +77,8 @@ def main():
   mismatches={tag:same_predictions(out/'baseline'/f'{tag}.csv',out/'plain_reverse'/f'{tag}.csv') for tag in ('pred','en_pred','ko_pred','hs_pred')}
   if any(mismatches.values()):raise RuntimeError(f'Original-vs-observed/order replay mismatch: {mismatches}')
   status['original_observed_replay_mismatches']=mismatches;status['replay_rows']=len(subset)
+  from audit_baseline import audit
+  audit(payload,test,out/'baseline',cat)
   from evaluate import evaluate
   evaluate(HERE/'data',out/'baseline',out/'baseline_diagnosis',split=a.split)
   timings['experiment']=run([sys.executable,HERE/'run_candidate.py','--payload',payload,'--test',test,'--catalog',cat,'--baseline',out/'baseline','--out',out/'experiment'],HERE,out/'experiment.log',cap=900)
@@ -76,6 +88,9 @@ def main():
  except BaseException as e:
   status.update(status='FAILED_OR_STOPPED',error=str(e));(out/'error.txt').write_text(traceback.format_exc());print(traceback.format_exc(),flush=True)
  finally:
+  status['total_diagnostic_seconds']=time.monotonic()-started
+  status['whole_run_budget_seconds']=1800
+  status['stage_receipts']={p.stem:json.loads(p.read_text()) for p in out.glob('*.stage.json')}
   status['timings_seconds']=timings;status['finished_utc']=datetime.datetime.now(datetime.timezone.utc).isoformat();(out/'STATUS.json').write_text(json.dumps(status,ensure_ascii=False,indent=2))
   archive=work/'ASTRA_HIGHGAIN_RESULTS.zip'
   with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as z:

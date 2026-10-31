@@ -23,9 +23,16 @@ r=types.SimpleNamespace(ids=np.array(['A','B','C']),catalog=pd.DataFrame({'vesse
 b=types.SimpleNamespace(score_groups=lambda blocks:[np.asarray(x).copy() for x in blocks]);model=m.EncoderViewsEnsemble(b,[(s,1) for s in scorers],r)
 rows=[{'sample_id':'active','vessel_name':'한글'},{'sample_id':'skip','vessel_name':'한글'},{'sample_id':'one','vessel_name':'한글'}]
 sigs=[{'cand':np.array([0,1,2])},{'cand':np.array([0,1,2])},{'cand':np.array([0])}];blocks=[np.array([.4,.35,.25]),np.array([.9,.05,.05]),np.array([1.])]
+import neural_rescue as nr
+for sig in sigs:
+ for key in nr.SIGNALS:sig[key]=np.zeros(len(sig['cand']))
 expected=model.score_records(rows,sigs,blocks);before=[s.calls for s in scorers]
 out=R/'capture_qa/actual_class_trace.jsonl';out.unlink(missing_ok=True);attach_neural_trace(out)
+packets=[];nr.install_capture(m.EncoderViewsEnsemble,set(),packets.append)
 got=model.score_records(rows,sigs,blocks);assert all(np.array_equal(a,b) for a,b in zip(expected,got));assert [s.calls-before[i] for i,s in enumerate(scorers)]==[1,1]
+for p,s in zip(packets,got):
+ assert p['v20']==p['ids'][int(np.argmax(s))]
+ p.update(en='A',hs='B',gap=1.,components_ok=True);nr.validate(p)
 rev=model.score_records(rows[::-1],sigs[::-1],blocks[::-1]);assert all(np.array_equal(a,b) for a,b in zip(got,rev[::-1]))
 for i in range(3):assert np.array_equal(got[i],model.score_records(rows[i:i+1],sigs[i:i+1],blocks[i:i+1])[0])
 tr=[json.loads(x) for x in out.read_text().splitlines()][:3];assert len(tr[0]['views'])==2 and tr[1]['neural_skipped'] and tr[2]['neural_skipped']

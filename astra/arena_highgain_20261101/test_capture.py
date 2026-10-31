@@ -55,6 +55,7 @@ for tag in ['en','ko','hs']:
  if tag=='hs':
   (p/'pipeline.py').write_text('TON_GATE=None\ndef score_candidates(*a,**kw):return [],[]\ndef allowed(*a,**kw):return []\n')
  if tag=='ko':
+  (p/'model').mkdir(exist_ok=True);(p/'model/train_vessels.json').write_text('[]')
   s=p/'model/src';s.mkdir(parents=True,exist_ok=True);(s/'__init__.py').write_text('');(s/'encoder_views.py').write_text('class EncoderViewsEnsemble:\n def score_records(self,rows,signals,blocks):return blocks\n')
 input_rows=[['0','ENGLISH','0','C','A','A'],['1','한글','4','C','A','A'],['2','한글','1','C','A','A'],['3','한글','1','C','A','B'],['4','한글','1','C','A','C']]
 df=pd.DataFrame(input_rows,columns=['sample_id','vessel_name','gap','en','ko','hs']);df.to_csv(D/'test.csv',index=False)

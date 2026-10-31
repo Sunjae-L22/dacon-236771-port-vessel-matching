@@ -1,6 +1,6 @@
 """Run actual C_vote router with observation-only child hooks; fail closed for measurement."""
 from pathlib import Path
-import sys,os,json,shutil,time,importlib.util
+import sys,os,json,shutil,time,importlib.util,hashlib
 sys.dont_write_bytecode=True
 
 def main(payload,test,catalog,dest,trace=True):
@@ -38,7 +38,7 @@ def main(payload,test,catalog,dest,trace=True):
     secs=time.perf_counter()-t
     inp=pd.read_csv(test,dtype=str,keep_default_na=False);pred=pd.read_csv(dest/'pred.csv',dtype=str,keep_default_na=False)
     if pred.sample_id.tolist()!=inp.sample_id.tolist():raise RuntimeError('Output order mismatch')
-    (dest/'run_meta.json').write_text(json.dumps(dict(rows=len(inp),seconds_end_to_end=secs,trace_enabled=trace,all_voters_succeeded=True,processes=starts),indent=2))
+    (dest/'run_meta.json').write_text(json.dumps(dict(rows=len(inp),seconds_end_to_end=secs,trace_enabled=trace,all_voters_succeeded=True,processes=starts,test_sha256=hashlib.sha256(test.read_bytes()).hexdigest(),catalog_sha256=hashlib.sha256(catalog.read_bytes()).hexdigest(),router_sha256=hashlib.sha256((payload/'script.py').read_bytes()).hexdigest()),indent=2))
     return secs
 
 if __name__=='__main__':main(*sys.argv[1:5],trace='--plain' not in sys.argv[5:])
