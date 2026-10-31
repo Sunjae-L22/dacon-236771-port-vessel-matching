@@ -384,3 +384,16 @@
 - 10/31 21:00 Astra A2 검토(스크립트·astra_decision.py 확인: 행별 순수 함수, 110 gap으로 hard 판정, 쉬운 행·톤수결측 불변 assert) → 111로 번호 부여.
 - 10/31 LB 111(Astra A2) = 0.9395238376 = 한글490(−3 vs 110)·영문3506. 톤수 있는 hard 행에서 음절 노이즈 재학습 랭커는 110보다 나쁨. 합성 노이즈 재학습이 Public으로 안 옮겨진 또 하나의 사례(99·107·111).
 - 10/31 21:40 HanSunwook 파이프라인(github HanSunwook/vessel-analysis-project) 해독표: 1031_08_hyb_w = 한글495·영문3490 (오답 중 후보누락 20%, 자매선+오타 위주; 퍼지 후보는 그쪽에서 −2). 3자 한글 투표 `shared/experiments/build_vote.py` (영문·110확신행=110, 나머지 2/3 일치, 전부 다르면 v18). 93 대역 리허설 통과(3,000행 244초, 영문 차이0, 불일치0). HanSunwook 제출 ZIP(model.pkl 포함) 필요.
+- 10/31 22:00 build113 완료 → 112(게이트 4) / 113(게이트 없음) 조립. 로컬: 둘 다 600행 불일치0, 영문 0, 110 대비 한글 51/291(로컬 test는 정답 제외로 거의 전부 hard), 110 gap≥4 행 변경 0(110에 gap 출력 붙여 대조). KoCat 검색 12ms/질의(문자열 127,962개). HanSunwook 1031_08 재현 학습(opus/stage2/hsw_train.py, pipeline.fit + 한글 사본 가중치 1.0) 진행 중.
+
+
+### Astra 10/31 22:03 — 0.97 추가경로 / G4 ByT5 실행묶음 (Public 추가제출0)
+- 111/A2 PublicK490/E3506,110−3를반영해A2개선권고철회.이전K492–500예상실패명시.0.97문턱은E3506고정시K514(513은0.969787).
+- CPU역복원→동일110재채점:fold2(6모델)cleanharm0/noise순증0,fold4(1모델)cleanharm0/noise+3;뷰oracle구출3/4뿐이라보류.
+- Opus112/113·v18combo/fuse/3자투표와겹치지않는ByT5지도학습실행묶음준비.사용자가G4가능확인.실제GPU학습성능은미측정.110hardtop100에고정조건부점수;깨끗손해0및두fold최소gate통과시에만전체학습·UNREVIEWED시험ZIP.자동제출없음.
+- 고유전체학습쌍8222=110기존ko_pairs집합;fit/val선박중복0;8질의top100및점수재계산차이0.원본pretrained로딩/forward/backward확인.
+- 작은시험모델연결QA만:3000행312.1초/600불일치0,110대비Ko71/En0변경,easy0/scope밖0,baseline추적3000일치,4개추가프로세스순서·부분집합불일치0.실제학습ByT5성능/속도아님.
+- 인계 `astra/msg/012_20261031-2203_byt5-G4-ready.md`. 실행ZIP45,088,572bytes SHA256 f44257f2e3cf45b6a897561ad76d5690cefd0006c627bf000fe9ca870e10bcbf. 반환파일RESULTS_RETURN_TO_ASTRA.zip을검토하기전후보추천없음.
+
+- Astra 10/31 22:10 G4 ByT5 결과수신: fold2/4각1500step정상완료(91.48/91.91초),입력SHA일치,4670질의/후보/고정융합예측독립재현. noise순증+32(53/21)/+24(39/15),그러나fold2clean4구출/4훼손(베마그레이스↔리퍼스호각1척반복)이라사전gate실패. clean총점같음은손해0아님. 전체학습/제출ZIP안만듦,Public0회. 탐색적이름점수guard도훼손4유지로기각;톤수보유제한noise+3/+0이라제출안함. 인계013,상세astra/byt5_20261031/gpu_return_20261031/REVIEW.md. 현재레시피재실행불필요;Drivefold가중치보존.
+- 10/31 LB 112 = 0.9539975218 = 한글501(+8 vs 110)·영문3506, 서버 11분50초. **새 최고**. kc 피처(72B 카탈로그 한글 표기) 재학습 + 게이트(110 gap≥4 유지)가 Public에서 확인됨 — fold 이득이 Public으로 옮겨진 첫 사례(새 정보 추가형).

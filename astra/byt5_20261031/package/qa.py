@@ -5,8 +5,9 @@ import pandas as pd
 
 def command(args,cwd,env,log):
     started=time.time()
-    with Path(log).open('w') as f:
-        p=subprocess.run(args,cwd=cwd,env=env,stdout=f,stderr=subprocess.STDOUT)
+    p=subprocess.run(args,cwd=cwd,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    # Publish after completion; workspace snapshots may replace an open log inode.
+    Path(log).write_text(p.stdout)
     if p.returncode:raise RuntimeError(f'command failed; see {log}')
     return time.time()-started
 
@@ -14,7 +15,7 @@ def qa(base,candidate,out):
     here=Path(__file__).resolve().parent;out=Path(out).resolve();out.mkdir(parents=True,exist_ok=True)
     env={k:v for k,v in os.environ.items() if k!='KO_DICT'}
     env.update(PYTHONHASHSEED='0',OMP_NUM_THREADS='2',OPENBLAS_NUM_THREADS='1',HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',ASTRA_TRACE=str(out/'trace'),LOCAL_CHECK_SAVE=str(out/'candidate3000.csv'))
-    command([sys.executable,str(here/'local_check.py'),str(candidate)],here,env,out/'local_check.log')
+    command([sys.executable,'-u',str(here/'local_check.py'),str(candidate)],tempfile.gettempdir(),env,out/'local_check.log')
     log=(out/'local_check.log').read_text();m=re.search(r'rows 3000\s+time ([0-9.]+)s',log)
     assert m and 'subset 600 rows, mismatches 0' in log,log[-2000:]
     trace=pd.DataFrame(json.loads((out/'trace.3000.json').read_text())).set_index('sample_id')

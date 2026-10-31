@@ -6,10 +6,12 @@ REVISION='68377bdc18a2ffec8a0533fef03b1c513a4dd49d'
 
 def run(args,log):
     env=dict(os.environ,PYTHONHASHSEED='0',OMP_NUM_THREADS='2',OPENBLAS_NUM_THREADS='1',TOKENIZERS_PARALLELISM='false',CUBLAS_WORKSPACE_CONFIG=':4096:8')
-    with Path(log).open('w') as f:
-        p=subprocess.Popen(args,cwd=HERE,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1)
-        for line in p.stdout:print(line,end='',flush=True);f.write(line);f.flush()
-        rc=p.wait()
+    Path(log).write_text('')
+    p=subprocess.Popen(args,cwd=HERE,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1)
+    for line in p.stdout:
+        print(line,end='',flush=True)
+        with Path(log).open('a') as f:f.write(line)
+    rc=p.wait()
     if rc:raise RuntimeError(f'exit {rc}: {log}')
 
 def allowed_time():
@@ -29,11 +31,14 @@ def main(out):
     out=Path(out).resolve();out.mkdir(parents=True,exist_ok=False);status=dict(status='RUNNING',public_submissions=0,revision=REVISION)
     try:
         allowed_time()
-        manifest=json.loads((HERE/'data_manifest.json').read_text())
-        for name,sha in manifest['files'].items():assert hashlib.sha256((HERE/name).read_bytes()).hexdigest()==sha,name
+        for filename in ['data_manifest.json','package_manifest.json']:
+            manifest=json.loads((HERE/filename).read_text())
+            for name,sha in manifest['files'].items():assert hashlib.sha256((HERE/name).read_bytes()).hexdigest()==sha,name
         import torch,transformers
         assert torch.cuda.is_available(),'Select GPU runtime first'
         assert transformers.__version__=='4.57.6',transformers.__version__
+        free,total=torch.cuda.mem_get_info()
+        assert free>=16*1024**3,f'Only {free/1024**3:.1f}GB free. Release your completed previous notebook model before rerunning; this kit never kills another process.'
         status.update(gpu=torch.cuda.get_device_name(0),torch=torch.__version__,transformers=transformers.__version__)
         (out/'environment.json').write_text(json.dumps(status,indent=2))
         from huggingface_hub import snapshot_download

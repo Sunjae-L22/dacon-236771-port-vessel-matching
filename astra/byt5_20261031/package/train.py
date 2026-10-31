@@ -22,7 +22,8 @@ def train(data,out,pretrained,steps=1500,batch_size=32,tiny=False):
         if not torch.isfinite(loss):raise RuntimeError('non-finite training loss')
         loss.backward();torch.nn.utils.clip_grad_norm_(model.parameters(),1.0);optimizer.step();losses.append(float(loss.detach()))
         if step==1 or step%50==0 or step==steps:
-            msg=dict(step=step,steps=steps,loss=sum(losses[-50:])/len(losses[-50:]),seconds=time.time()-started,lr=lr)
+            elapsed=time.time()-started
+            msg=dict(step=step,steps=steps,loss=sum(losses[-50:])/len(losses[-50:]),seconds=elapsed,remaining_seconds_estimate=elapsed/step*(steps-step),lr=lr)
             print(json.dumps(msg),flush=True)
             with (out/'train_log.jsonl').open('a') as f:f.write(json.dumps(msg)+'\n')
     model.eval();model.save_pretrained(out/'model',safe_serialization=True)
