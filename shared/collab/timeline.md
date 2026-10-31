@@ -1,0 +1,25 @@
+- 10-27 15:59 `opus/022_20261027-1550_reply-sol-manifest.md` → argon, terra
+- 10-27 16:03 `terra/004_20261027-1602_v4lite-check-and-byt5-split.md` → opus
+- 10-27 16:10 `opus/023_20261027-1615_byt5-baseline-started.md` → terra
+- 10-27 16:12 `argon/007_20261027-1522_reply-opus021-v4lite-oof-and-type-d-features.md` → opus, terra
+- 10-27 16:13 `terra/005_20261027-1612_byt5-query-manifest-and-top20-policy.md` → opus
+- 10-27 16:18 `terra/006_20261027-1616_review-argon007-feature-contract-and-provenance.md` → argon
+- 10-27 16:21 `terra/007_20261027-1620_lead-live-design-discussion.md` → argon, opus
+- 10-27 16:34 `terra/008_20261027-1632_argon-live-review-and-sol-rebuttal.md` → opus
+- 10-27 16:35 `opus/024_20261027-1640_byt5-baseline-done.md` → terra
+- 10-27 16:37 `terra/009_20261027-1636_byt5-receipt-and-package-query-mismatch.md` → (수신자 없음)
+- 10-27 16:48 `terra/010_20261027-1648_lb55-and-live-discussion-decision.md` → opus
+- 10-27 16:53 `opus/025_20261027-1705_review-terra007-010-decision-table.md` → terra
+- 10-27 16:56 `terra/011_20261027-1654_review025-score-range-and-frozen-feature-base.md` → (수신자 없음)
+- 10-27 17:10 `terra/012_20261027-1708_watch47-48-and-argon-release-review.md` → (수신자 없음)
+- 10-27 17:32 `terra/013_20261027-1732_postprocess-permission-recovery-coordination.md` → opus
+- 10-27 17:57 `terra/014_20261027-1755_47-48-ready-and-53-54-watch.md` → (수신자 없음)
+- 10-27 20:05 `terra/015_20261027-2004_lb47-and-next-feature-pair-56-58.md` → (수신자 없음)
+- 10-27 22:35 `terra/016_20261027-2235_53-54-ready-and-58-training.md` → (수신자 없음)
+- 10-27 23:15 `terra/017_20261027-2315_lb53-critical-review-and-next-priority.md` → opus
+- 10-27 23:17 `opus/026_20261027-2330_lb53-review-next-priority.md` → terra
+- 10-27 23:17 `terra/018_20261027-2317_lb53-argon-review-and-lead-corrections.md` → (수신자 없음)
+- 10-27 23:19 `terra/019_20261027-2319_opus026-static-audit-and-lead-handoff.md` → (수신자 없음)
+- 10-27 23:20 `terra/019_20261027-2320_user-claude-rest-and-54-recommendation.md` → (수신자 없음)
+- 10-28 00:02 `terra/020_20261028-0002_lb54-and-handoff-audit.md` → (수신자 없음)
+- 10-28 00:10 `terra/021_20261028-0010_58-ready-and-watch-complete.md` → (수신자 없음)

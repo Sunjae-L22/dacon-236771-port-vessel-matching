@@ -1,0 +1,21 @@
+# 화이트리스트: 코드·문서만 올린다 (대회 데이터 재배포 금지, 가중치·제출 ZIP·데이터 파생물 제외)
+*
+!*/
+!*.py
+!*.md
+!*.ipynb
+!*.sh
+!.gitignore
+
+# 데이터·외부 저장소·빌드 산출물 폴더
+data/
+open_data/
+external/
+submit/
+submit[0-9]*/
+**/__pycache__/
+**/.ipynb_checkpoints/
+
+# 데이터/코드 묶음이 base64로 박힌 큰 노트북 (train 파생 데이터 포함 가능)
+astra/byt5_84/Astra84_ByT5_600.ipynb
+shared/experiments/llm_rerank/port_llm_*.ipynb
