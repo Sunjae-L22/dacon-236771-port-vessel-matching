@@ -14,7 +14,8 @@ spec.loader.exec_module(module)
 
 class AuditTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        (ROOT/'tmp').mkdir(exist_ok=True)
+        self.tmp = tempfile.TemporaryDirectory(dir=ROOT/'tmp')
         self.root = Path(self.tmp.name)
         self.payload, self.baseline = self.root/"payload", self.root/"baseline"
         (self.payload/"model/ko/model").mkdir(parents=True)

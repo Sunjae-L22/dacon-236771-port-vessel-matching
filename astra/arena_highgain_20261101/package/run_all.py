@@ -10,7 +10,8 @@ RUN_DEADLINE=None
 def sha(path):
  h=hashlib.sha256()
  with Path(path).open('rb') as f:
-  for b in iter(lambda:f.read(8*1024*1024),b''):h.update(b)
+  for b in iter(lambda:f.read(8*1024*1024),b''):
+   remaining();h.update(b)
  return h.hexdigest()
 def remaining():
  n=CUTOFF-time.time()
@@ -24,11 +25,16 @@ def run(argv,cwd,log,cap=1800):
  receipt={'budget_seconds':seconds,'state':'STARTED','command':[str(x) for x in argv]}
  env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',PYTHONHASHSEED='0',OMP_NUM_THREADS='2',OPENBLAS_NUM_THREADS='2',MKL_NUM_THREADS='2',TOKENIZERS_PARALLELISM='false',HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1')
  with Path(log).open('w') as out:
-  p=subprocess.Popen([str(x) for x in argv],cwd=cwd,env=env,stdout=out,stderr=subprocess.STDOUT,start_new_session=True)
+  p=None
   try:
+   p=subprocess.Popen([str(x) for x in argv],cwd=cwd,env=env,stdout=out,stderr=subprocess.STDOUT,start_new_session=True)
    rc=p.wait(timeout=seconds);receipt.update(state='COMPLETE' if rc==0 else 'FAILED',returncode=rc)
   except BaseException:
-   os.killpg(p.pid,signal.SIGKILL);p.wait();receipt.update(state='INTERRUPTED_OR_TIMED_OUT',returncode=p.returncode);raise
+   if p is not None:
+    try:os.killpg(p.pid,signal.SIGKILL)
+    except ProcessLookupError:pass
+    p.wait()
+   receipt.update(state='FAILED_OR_INTERRUPTED',returncode=p.returncode if p is not None else None);raise
   finally:
    receipt['elapsed_seconds']=time.monotonic()-started;Path(log).with_suffix('.stage.json').write_text(json.dumps(receipt,indent=2))
  if rc:raise RuntimeError(f'Failed stage {Path(log).name}, rc={rc}; see log')
@@ -44,7 +50,12 @@ def extract(source,dest):
   for i in z.infolist():
    remaining();p=dest/i.filename
    if not p.resolve().is_relative_to(dest.resolve()) or ((i.external_attr>>16)&0o170000)==0o120000:raise ValueError('Unsafe ZIP member')
-   z.extract(i,dest)
+   if i.is_dir():p.mkdir(parents=True,exist_ok=True)
+   else:
+    p.parent.mkdir(parents=True,exist_ok=True)
+    with z.open(i) as source_member,p.open('wb') as target:
+     for block in iter(lambda:source_member.read(8*1024*1024),b''):
+      remaining();target.write(block)
  if not (dest/'script.py').exists():raise ValueError('Unexpected baseline ZIP layout')
 
 def same_predictions(a,b):
@@ -83,6 +94,7 @@ def main():
   evaluate(HERE/'data',out/'baseline',out/'baseline_diagnosis',split=a.split)
   timings['experiment']=run([sys.executable,HERE/'run_candidate.py','--payload',payload,'--test',test,'--catalog',cat,'--baseline',out/'baseline','--out',out/'experiment'],HERE,out/'experiment.log',cap=900)
   report=evaluate(HERE/'data',out/'baseline',out/'evaluation',out/'experiment/pred.csv',split=a.split)
+  remaining()
   status.update(status='COMPLETE',paired_summary=report['cohorts'],clean_harm=report['clean_harm'])
   status['production_3000_time_measured']=False;status['production_600_invariance_measured']=False
  except BaseException as e:

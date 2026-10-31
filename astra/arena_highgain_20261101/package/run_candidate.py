@@ -3,9 +3,14 @@ from pathlib import Path
 import argparse,hashlib,json,sys,subprocess,csv,math
 sys.dont_write_bytecode=True
 import neural_rescue as nr
-from evaluate import read,index
 HERE=Path(__file__).resolve().parent
 
+def read(path):
+ with Path(path).open(encoding='utf-8-sig') as f:return list(csv.DictReader(f))
+def index(records):
+ records=list(records);out={r['sample_id']:r for r in records}
+ if len(out)!=len(records):raise ValueError('Duplicate sample_id')
+ return out
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def packets_from_baseline(payload,test,catalog,baseline):
  payload,test,catalog,baseline=map(Path,[payload,test,catalog,baseline])
@@ -16,6 +21,9 @@ def packets_from_baseline(payload,test,catalog,baseline):
  from audit_baseline import audit
  audit(payload,test,baseline,catalog)
  rows=index(read(test));base=index(read(baseline/'pred.csv'));parts={t:index(read(baseline/f'{t}_pred.csv')) for t in ('en','ko','hs')}
+ import pandas as pd
+ parsed=index(pd.read_csv(test,encoding='utf-8-sig',dtype={k:str for k in ('sample_id','vessel_name','call_sign','vessel_type','flag_name')}).to_dict('records'))
+ traces=index(json.loads(s) for s in (baseline/'internal/v20_candidates.jsonl').read_text().splitlines())
  partial=index(json.loads(s) for s in (baseline/'internal/v20_packets_partial.jsonl').read_text().splitlines())
  expected={sid for sid,row in rows.items() if nr.hangul(row)}
  if set(partial)!=expected:raise ValueError('Missing/extra v20 packet')
@@ -23,6 +31,14 @@ def packets_from_baseline(payload,test,catalog,baseline):
  for sid in rows:
   if sid not in expected:continue
   p=dict(partial[sid]);e=parts['en'][sid];k=parts['ko'][sid];h=parts['hs'][sid]
+  def scalar(v):
+   if hasattr(v,'item'):v=v.item()
+   return None if isinstance(v,float) and not math.isfinite(v) else v
+  expected_row={key:scalar(parsed[sid][key]) for key in nr.ROW_KEYS if key in parsed[sid]}
+  if p['row']!=expected_row:raise ValueError('Captured model row differs from actual input')
+  t=traces[sid]
+  for pk,tk in [('ids','candidate_ids'),('base','base_prob'),('post','final_scores'),('beams','beams')]:
+   if p[pk]!=t[tk]:raise ValueError('The two independent observation records disagree: '+pk)
   if p['v20']!=k['target_vessel_id']:raise ValueError('Captured v20 winner disagrees with actual output')
   p.update(en=e['target_vessel_id'],hs=h['target_vessel_id'],gap=float(e['ko_gap']),components_ok=True)
   nr.validate(p)

@@ -9,6 +9,9 @@ across test rows.
   Korean, 110 gap >= GAP (sure)       -> 110
   other Korean rows                   -> answer shared by >= 2 of {v18, hsw, ours}; all differ -> TIE (ours / v18)
 BASE may be 110 or 112 (112-style scripts report 110's gap, build_fuse.KC_EDITS).
+TIE = "kc<M>" (e.g. kc0.05): when all three differ, compare the record name with the 72B Hangul rendering of each of
+the three answers (BASE's model/kocat.py + catalog_ko.csv, jamo similarity) and take the most similar one if it beats
+the v20 answer's similarity by >= M; otherwise v20. Any failure to load the table falls back to v20 with a warning.
 
 Layout: model/ko = v18, model/hs = HanSunwook, model/en = 110 writing ko_gap (build_fuse.gap_script).
 v18 and hsw run on Korean rows only; each package in its own process.
@@ -85,6 +88,18 @@ def finish(job, sids, required, jobs):
         return pd.DataFrame(columns=["target_vessel_id"])
 
 
+def load_kc(catalog_path):
+    try:
+        base = HERE / "model" / "en" / "model"
+        sys.path.insert(0, str(base))
+        from kocat import KoCat
+        cat = pd.read_csv(catalog_path, encoding="utf-8-sig")
+        return KoCat(cat, base / "catalog_ko.csv"), {{v: i for i, v in enumerate(cat["vessel_id"].astype(str))}}
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING kc table unavailable ({{e}}); ties go to v20", flush=True)
+        return None, None
+
+
 def run(test_path="data/test.csv", catalog_path="data/vessel_catalog.csv", out="output/submission.csv"):
     test = pd.read_csv(test_path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
     catalog = str(Path(catalog_path).resolve())
@@ -113,7 +128,8 @@ def run(test_path="data/test.csv", catalog_path="data/vessel_catalog.csv", out="
         raise SystemExit("ours: missing Korean gap")
     a = v18["target_vessel_id"].reindex(sid).to_numpy() if len(v18) else ours
     b = hs["target_vessel_id"].reindex(sid).to_numpy() if len(hs) else ours
-    pred, n = [], {{"sure": 0, "agree": 0, "tie": 0}}
+    pred, n = [], {{"sure": 0, "agree": 0, "tie": 0, "kc_switch": 0}}
+    kc = id2i = None
     for i in range(len(test)):
         if not ko[i]:
             pred.append(ours[i])
@@ -121,6 +137,17 @@ def run(test_path="data/test.csv", catalog_path="data/vessel_catalog.csv", out="
             pred.append(ours[i]); n["sure"] += 1
         elif b[i] == ours[i] or a[i] == b[i] or a[i] == ours[i]:
             pred.append(b[i] if b[i] in (ours[i], a[i]) else a[i]); n["agree"] += 1
+        elif TIE.startswith("kc"):
+            if kc is None:
+                kc, id2i = load_kc(catalog)
+            pick = a[i]
+            if kc is not None and all(x in id2i for x in (a[i], b[i], ours[i])):
+                sims = kc.sim(test["vessel_name"].iat[i], [id2i[a[i]], id2i[b[i]], id2i[ours[i]]])
+                j = int(sims.argmax())
+                if j and sims[j] - sims[0] >= float(TIE[2:]):
+                    pick = (a[i], b[i], ours[i])[j]
+                    n["kc_switch"] += 1
+            pred.append(pick); n["tie"] += 1
         else:
             pred.append(ours[i] if TIE == "ours" else a[i]); n["tie"] += 1
     out = Path(out)
