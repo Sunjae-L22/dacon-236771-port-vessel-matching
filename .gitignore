@@ -22,3 +22,4 @@ shared/experiments/llm_rerank/port_llm_*.ipynb
 
 # arena 토너먼트 산출물
 .arena/
+astra/arena_20261101/upstream/
