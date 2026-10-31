@@ -32,6 +32,7 @@ import tempfile
 import time
 import unicodedata
 
+import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
@@ -59,14 +60,29 @@ def start(pkg, df, tmp, catalog):
     return pkg, p, dst, len(df), time.time()
 
 
-def finish(job):
+def finish(job, sids, required, jobs):
+    """Wait for one package; check it answered exactly its rows. A failed or incomplete voter (ko, hs) loses its
+    votes (fallback towards ours); a failed 'en' (ours, every row) stops the run after killing the others."""
     if job is None:
         return pd.DataFrame(columns=["target_vessel_id"])
     pkg, p, dst, n, t = job
-    if p.wait():
-        raise SystemExit(f"{{pkg}} failed with code {{p.returncode}}")
-    print(f"{{pkg}}: {{n}} rows in {{time.time() - t:.0f}}s", flush=True)
-    return pd.read_csv(dst, dtype={{"sample_id": str, "target_vessel_id": str}}).set_index("sample_id")
+    try:
+        if p.wait():
+            raise RuntimeError(f"exit code {{p.returncode}}")
+        d = pd.read_csv(dst, dtype={{"sample_id": str, "target_vessel_id": str}})
+        if d["sample_id"].duplicated().any() or set(d["sample_id"]) != set(sids) or d["target_vessel_id"].isna().any():
+            raise RuntimeError("rows missing, duplicated or empty")
+        print(f"{{pkg}}: {{n}} rows in {{time.time() - t:.0f}}s", flush=True)
+        return d.set_index("sample_id")
+    except Exception as e:  # noqa: BLE001
+        if required:
+            for j in jobs:
+                if j is not None and j[1].poll() is None:
+                    j[1].kill()
+                    j[1].wait()
+            raise SystemExit(f"{{pkg}} failed: {{e}}")
+        print(f"WARNING {{pkg}} failed ({{e}}); its votes are dropped", flush=True)
+        return pd.DataFrame(columns=["target_vessel_id"])
 
 
 def run(test_path="data/test.csv", catalog_path="data/vessel_catalog.csv", out="output/submission.csv"):
@@ -75,13 +91,26 @@ def run(test_path="data/test.csv", catalog_path="data/vessel_catalog.csv", out="
     ko = test["vessel_name"].map(is_hangul).to_numpy(dtype=bool)
     tmp = tempfile.mkdtemp()
     try:
-        jobs = [start("en", test, tmp, catalog), start("ko", test[ko], tmp, catalog), start("hs", test[ko], tmp, catalog)]
-        en, v18, hs = (finish(j) for j in jobs)
+        jobs = []
+        try:
+            for pkg, df in (("en", test), ("ko", test[ko]), ("hs", test[ko])):
+                jobs.append(start(pkg, df, tmp, catalog))
+        except Exception:
+            for j in jobs:
+                if j is not None:
+                    j[1].kill()
+                    j[1].wait()
+            raise
+        en = finish(jobs[0], test["sample_id"], True, jobs)
+        v18 = finish(jobs[1], test["sample_id"][ko], False, jobs)
+        hs = finish(jobs[2], test["sample_id"][ko], False, jobs)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     sid = test["sample_id"]
     ours = en["target_vessel_id"].reindex(sid).to_numpy()
     gap = pd.to_numeric(en["ko_gap"], errors="coerce").reindex(sid).to_numpy()
+    if not np.isfinite(gap[ko]).all():
+        raise SystemExit("ours: missing Korean gap")
     a = v18["target_vessel_id"].reindex(sid).to_numpy() if len(v18) else ours
     b = hs["target_vessel_id"].reindex(sid).to_numpy() if len(hs) else ours
     pred, n = [], {{"sure": 0, "agree": 0, "tie": 0}}
