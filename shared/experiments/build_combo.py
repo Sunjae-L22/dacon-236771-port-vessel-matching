@@ -9,7 +9,8 @@ The router splits data/test.csv by the competition's Korean rule (a Hangul sylla
 writes each part to a temp dir, runs each package's own run() in a separate process (separate memory and
 GPU), and merges in the original row order. A row's route and prediction depend only on that row.
 
-usage: python3 build_combo.py NUM KO_ZIP EN_ZIP
+usage: python3 build_combo.py NUM KO_ZIP EN_ZIP          -> submissions/NUM_submit.zip
+       python  build_combo.py OUT.zip KO_ZIP EN_ZIP      -> OUT.zip (standalone kit use)
 """
 import sys
 import zipfile
@@ -30,7 +31,7 @@ import unicodedata
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
-RUN = ("import importlib.util, sys; p = sys.argv[1]; sys.path.insert(0, p.rsplit('/', 1)[0]); "
+RUN = ("import importlib.util, os, sys; p = sys.argv[1]; sys.path.insert(0, os.path.dirname(p)); "
        "s = importlib.util.spec_from_file_location('entry', p); m = importlib.util.module_from_spec(s); "
        "s.loader.exec_module(m); m.run(sys.argv[2], sys.argv[3], sys.argv[4])")
 
@@ -75,7 +76,10 @@ if __name__ == "__main__":
 
 
 def main(num, ko_zip, en_zip):
-    out = ROOT / "submissions" / f"{num}_submit.zip"
+    if num.endswith(".zip"):
+        out, num = Path(num), 0
+    else:
+        out, num = ROOT / "submissions" / f"{num}_submit.zip", int(num)
     assert not out.exists(), out
     req = []
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as w:
@@ -101,4 +105,4 @@ def main(num, ko_zip, en_zip):
 
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]), sys.argv[2], sys.argv[3])
+    main(sys.argv[1], sys.argv[2], sys.argv[3])
