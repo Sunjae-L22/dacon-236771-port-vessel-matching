@@ -7,12 +7,13 @@ fix rows where one model is wrong and the other two agree. Voting is across mode
 across test rows.
   non-Korean rows                     -> 110 (English 3506)
   Korean, 110 gap >= GAP (sure)       -> 110
-  other Korean rows                   -> answer shared by >= 2 of {v18, hsw, 110}; all differ -> v18
+  other Korean rows                   -> answer shared by >= 2 of {v18, hsw, ours}; all differ -> TIE (ours / v18)
+BASE may be 110 or 112 (112-style scripts report 110's gap, build_fuse.KC_EDITS).
 
 Layout: model/ko = v18, model/hs = HanSunwook, model/en = 110 writing ko_gap (build_fuse.gap_script).
 v18 and hsw run on Korean rows only; each package in its own process.
 
-usage: python build_vote.py OUT.zip V18_ZIP HSW_ZIP BASE110_ZIP [GAP=4]
+usage: python build_vote.py OUT.zip V18_ZIP HSW_ZIP BASE_ZIP [GAP=4] [TIE=ours]
 """
 import sys
 import zipfile
@@ -21,7 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_fuse import copy_into, gap_script  # noqa: E402
 
-ROUTER = '''"""DACON entry point (3-way Korean vote v18 / HanSunwook / 110, 110 kept when gap >= {gap}; see build_vote.py)."""
+ROUTER = '''"""DACON entry point (3-way Korean vote v18 / HanSunwook / ours, ours kept when 110 gap >= {gap}, tie -> {tie}; see build_vote.py)."""
 from pathlib import Path
 import os
 import shutil
@@ -35,6 +36,7 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 GAP = {gap}
+TIE = "{tie}"
 RUN = ("import importlib.util, inspect, os, sys; p = sys.argv[1]; sys.path.insert(0, os.path.dirname(p)); "
        "s = importlib.util.spec_from_file_location('entry', p); m = importlib.util.module_from_spec(s); "
        "s.loader.exec_module(m); ps = inspect.signature(m.run).parameters; "
@@ -46,17 +48,24 @@ def is_hangul(s):
     return any("\\uac00" <= c <= "\\ud7a3" for c in unicodedata.normalize("NFC", s))
 
 
-def part(pkg, df, tmp, catalog):
+def start(pkg, df, tmp, catalog):
+    """Launch one package on its rows in its own process (the three run concurrently: GPU v20, CPU 110/112, CPU hsw)."""
     if df.empty:
-        return pd.DataFrame(columns=["target_vessel_id"])
+        return None
     src, dst = os.path.join(tmp, pkg + "_test.csv"), os.path.join(tmp, pkg + "_pred.csv")
     df.to_csv(src, index=False, encoding="utf-8-sig")
-    t = time.time()
-    p = subprocess.run([sys.executable, "-c", RUN, str(HERE / "model" / pkg / "script.py"), src, catalog, dst],
-                       cwd=str(HERE / "model" / pkg), env=dict(os.environ, PYTHONHASHSEED="0"))
-    if p.returncode:
+    p = subprocess.Popen([sys.executable, "-c", RUN, str(HERE / "model" / pkg / "script.py"), src, catalog, dst],
+                         cwd=str(HERE / "model" / pkg), env=dict(os.environ, PYTHONHASHSEED="0"))
+    return pkg, p, dst, len(df), time.time()
+
+
+def finish(job):
+    if job is None:
+        return pd.DataFrame(columns=["target_vessel_id"])
+    pkg, p, dst, n, t = job
+    if p.wait():
         raise SystemExit(f"{{pkg}} failed with code {{p.returncode}}")
-    print(f"{{pkg}}: {{len(df)}} rows in {{time.time() - t:.0f}}s", flush=True)
+    print(f"{{pkg}}: {{n}} rows in {{time.time() - t:.0f}}s", flush=True)
     return pd.read_csv(dst, dtype={{"sample_id": str, "target_vessel_id": str}}).set_index("sample_id")
 
 
@@ -66,9 +75,8 @@ def run(test_path="data/test.csv", catalog_path="data/vessel_catalog.csv", out="
     ko = test["vessel_name"].map(is_hangul).to_numpy(dtype=bool)
     tmp = tempfile.mkdtemp()
     try:
-        en = part("en", test, tmp, catalog)
-        v18 = part("ko", test[ko], tmp, catalog)
-        hs = part("hs", test[ko], tmp, catalog)
+        jobs = [start("en", test, tmp, catalog), start("ko", test[ko], tmp, catalog), start("hs", test[ko], tmp, catalog)]
+        en, v18, hs = (finish(j) for j in jobs)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     sid = test["sample_id"]
@@ -76,7 +84,7 @@ def run(test_path="data/test.csv", catalog_path="data/vessel_catalog.csv", out="
     gap = pd.to_numeric(en["ko_gap"], errors="coerce").reindex(sid).to_numpy()
     a = v18["target_vessel_id"].reindex(sid).to_numpy() if len(v18) else ours
     b = hs["target_vessel_id"].reindex(sid).to_numpy() if len(hs) else ours
-    pred, n = [], {{"sure": 0, "agree": 0, "v18": 0}}
+    pred, n = [], {{"sure": 0, "agree": 0, "tie": 0}}
     for i in range(len(test)):
         if not ko[i]:
             pred.append(ours[i])
@@ -85,7 +93,7 @@ def run(test_path="data/test.csv", catalog_path="data/vessel_catalog.csv", out="
         elif b[i] == ours[i] or a[i] == b[i] or a[i] == ours[i]:
             pred.append(b[i] if b[i] in (ours[i], a[i]) else a[i]); n["agree"] += 1
         else:
-            pred.append(a[i]); n["v18"] += 1
+            pred.append(ours[i] if TIE == "ours" else a[i]); n["tie"] += 1
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({{"sample_id": sid, "target_vessel_id": pred}}).to_csv(out, index=False)
@@ -97,14 +105,14 @@ if __name__ == "__main__":
 '''
 
 
-def main(out, v18_zip, hsw_zip, base_zip, gap="4"):
+def main(out, v18_zip, hsw_zip, base_zip, gap="4", tie="ours"):
     out = Path(out)
     assert not out.exists(), out
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as w:
         req = copy_into(w, zipfile.ZipFile(v18_zip), "model/ko")
         req += copy_into(w, zipfile.ZipFile(hsw_zip), "model/hs")
         req += copy_into(w, zipfile.ZipFile(base_zip), "model/en", gap_script)
-        w.writestr("script.py", ROUTER.format(gap=float(gap)))
+        w.writestr("script.py", ROUTER.format(gap=float(gap), tie=tie))
         w.writestr("requirements.txt", "\n".join(dict.fromkeys(req)) + "\n" if req else "# preinstalled packages only\n")
     print(out, round(out.stat().st_size / 1e9, 3), "GB", "requirements:", req)
 

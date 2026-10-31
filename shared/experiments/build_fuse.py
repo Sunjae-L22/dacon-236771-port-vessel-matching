@@ -115,10 +115,23 @@ def copy_into(w, z, prefix, edit_script=None):
     return req
 
 
+KC_EDITS = [  # 112-style scripts: report 110's gap (the gate), not the kc rankers' gap
+    (b"            use_kc = True\n", b"            use_kc = True\n            row_gap = None\n"),
+    (b"                use_kc = g110 < GATE\n", b"                use_kc = g110 < GATE\n                row_gap = g110\n"),
+    (b"            gaps.append(float(score[allowed[0]] - score[allowed[1]]) / n_ko if len(allowed) > 1 else 99.0)\n",
+     b"            gaps.append(row_gap if row_gap is not None else\n"
+     b"                        (float(score[allowed[0]] - score[allowed[1]]) / n_ko if len(allowed) > 1 else 99.0))\n"),
+]
+
+
 def gap_script(data):
     for a, b in EN_EDITS:
         assert data.count(a) == 1, a
         data = data.replace(a, b)
+    if b"use_kc = g110 < GATE" in data:
+        for a, b in KC_EDITS:
+            assert data.count(a) == 1, a
+            data = data.replace(a, b)
     return data
 
 
