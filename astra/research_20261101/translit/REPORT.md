@@ -61,3 +61,13 @@ Implementation under the deadline:
 - Actual L4 runtime and package validation remain mandatory. No literature result supplies them.
 
 This audit has no standalone measured C_vote improvement. The parent owns the real-name channel probe. The literature narrows the implementation and rejects redundant approaches; it does not certify a leaderboard target.
+
+## Normalized channel v2 implementation (subsequent parent-requested work)
+
+`normalized_channel.py` now implements a fully normalized finite mixture. Choose event count 0, 1 or 2; choose each operation independently; then choose its position uniformly. All adjacent swap positions are included, even equal-symbol pairs. Swap on length zero/one is identity; every operation on the empty string is identity. Two-event cancellations are included in the observation probability. `path_coefficients(clean, query)` returns JSON-safe coefficients grouped by operation sequence; `score(clean, query, params)` multiplies by fitted priors and sums all paths.
+
+The implementation addresses the earlier normalization objection. `NORMALIZED_FIT.json` was fitted using only `english_pairs.jsonl`: recomputed vessel-hash fold must be nonzero, and the observation must be reconstructible. Exact records are included. There are 4,342 fitted forms, of which 2,817 are exact; 36 nonreconstructible nonzero-fold forms are excluded. It performs exactly 30 EM iterations from uniform initialization. Each step-count and operation category receives one additive pseudocount, equivalent to Dirichlet(2) MAP updates. The likelihood is the marginal observation likelihood over all latent step counts, operation sequences and positions. Source hash, full training form keys, training vessel IDs, iteration objectives, and final parameters are saved.
+
+Fitted operation probabilities: delete 0.4048651492, duplicate 0.3130711207, swap 0.2820637301. Fitted event-count probabilities: zero 0.6452827154, one 0.3258269537, two 0.0288903310. These are estimates of this defined English character channel on reconstructible forms; they do not establish Korean noise frequencies. Selection of reconstructible observations remains an explicit modeling limitation.
+
+Four tests pass: finite output-support probability mass equals one including empty/repeated strings; coefficients agree with an independently enumerated positional two-stage composition; overlapping swaps, repeated duplication and cancellation paths are present; evaluation order and caller mutation do not affect results. The fitted MAP objective is nondecreasing across all 30 iterations. No Korean results, thresholds, GPU process or C_vote predictions were read during this implementation. This delivers a tested score, not a validated candidate.
