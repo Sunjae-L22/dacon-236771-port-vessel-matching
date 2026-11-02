@@ -16,6 +16,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).parent))
 from build_93_decomp import COMMON, SCRIPT  # noqa: E402
 
+SCRIPT = SCRIPT.replace("m.predict(feats[fam]) for m in models[fam]) for fam, w in KO.items()",
+                        "m.predict(feats.get(fam, F60)) for m in models[fam]) for fam, w in KO.items()")  # the ko36 family reads F60
+
 EN = {"en65": 1.5, "s62": 1.0}
 VARIANTS = {
     97: {"ranker": 0.5 / 6, "r36": 0.5 / 12},

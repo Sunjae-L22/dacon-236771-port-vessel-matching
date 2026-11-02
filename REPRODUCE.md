@@ -67,7 +67,7 @@ python3 shared/experiments/combo_kit/check_combo.py V5_S1S3.zip work_v5
 | 2 | 63, 64 → 65 (영문 6랭커) | `sh run_build63.sh` |
 | 3 | 70, 71 → 72 (한글 6랭커) | `sh shared/experiments/run_70_72.sh` |
 | 4 | 79 | `python3 shared/experiments/build_79_submit.py` |
-| 5 | 92 (Super98·Clean18 포함) | `python3 astra/super98/build_92.py` (93의 답에는 Super98·Clean18이 쓰이지 않지만 ZIP 구조상 입력) |
+| 5 | 92 (Super98·Clean18 포함) | `python3 astra/super98/build_92.py --mode prepare`, 이어서 `extract`, `train`, `package` (93의 답에는 Super98·Clean18이 쓰이지 않지만 ZIP 구조상 입력) |
 | 6 | 93 | `python3 shared/experiments/build_93_decomp.py` |
 | 7 | 110 | `python3 shared/experiments/build_110_fuzzy.py 110` |
 | 8 | 한글 kc 랭커 6개 | 아래 명령 |
@@ -86,6 +86,18 @@ J=shared/experiments/jamo_builds; python3 shared/experiments/build_113_kocat_ran
 LLM 표를 새로 만들려면 `shared/kocat/4_catalog_ko.ipynb`(Qwen2.5-72B, GPU)와 `shared/llm_aug/*.ipynb`를 씁니다. 결과가 달라지므로 Public 점수 재현에는 비공개 묶음의 표를 쓰세요.
 
 각 제출의 내용과 점수는 `submissions/README.md`, 실험 경위는 `shared/experiments/LOG.md`에 있습니다.
+
+## 검증 기록 (2026-11-02)
+
+GitHub에서 새로 클론하고 Drive 자료만 복원해 확인했습니다.
+
+| 항목 | 결과 |
+|---|---|
+| 92 ZIP과 build113 랭커로 93 → 110 → 112 재조립 | 원본과 파일 목록·CRC **전부 일치** (93 24개, 110 26개, 112 34개) |
+| V5_S1S3 조립 | 실제 112·HanSunwook·Erde와 스텁 v20으로 실행. 규칙 줄 `S1,S3`, GAP 4 확인. 실제 v20으로 하는 조립·점검은 11/01 Colab에서 PASS |
+| build113 재학습 | 7분간 데이터·LLM 표 로드 후 학습 진행, 오류 없이 수동 중단. **끝까지 돌리지는 않음** |
+| 대회 데이터 해시 | Drive `open.zip`이 학습에 쓴 파일과 일치 |
+| 추적 파일의 데이터 유출·이메일·토큰 검사 | 해당 없음 |
 
 ## 재현의 한계
 

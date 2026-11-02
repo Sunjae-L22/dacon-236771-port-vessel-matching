@@ -93,7 +93,7 @@ def run(test_path="data/test.csv", catalog_path="data/vessel_catalog.csv", out="
                 E24 = sfe.compute_query(row, idx, F60)
                 feats["sup98"] = np.column_stack((F60, E24))
                 feats["cln18"] = np.column_stack((F60, E24[:, keep_idx]))
-            score = sum(w * sum(m.predict(feats.get(fam, F60)) for m in models[fam]) for fam, w in KO.items())
+            score = sum(w * sum(m.predict(feats[fam]) for m in models[fam]) for fam, w in KO.items())
         else:
             idx, F65 = L65.query_features(ix, row, L65.query_candidates(ix, row))
             feats = {{"en65": F65, "s62": F65[:, :60]}}
