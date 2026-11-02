@@ -12,6 +12,7 @@
 |---|---|---:|---|---|
 | 대회 데이터 `open.zip` | `<Drive>/data/raw/` 또는 DACON | 1,873,016 | `2445fc26ade4e8b3bf4110d76296f7f36c6d907f554faa2b1308a30fdd8b5cc2` | 아무것도 재현 불가 |
 | 파생 파일 묶음 `repro_private_20261102.tar.gz` | `<Drive>/repro_private/` | 64.7MB | `0f9645b709fe61138ced0443df56f522185457c8120d96a8f8c8b149097eadca` | LLM 생성물을 GPU로 다시 만들어야 하고, 같은 값은 보장 안 됨 |
+| 과거 제출 ZIP 116개 `submissions_zips_20261102.tar` (`92_submit.zip` 포함, 풀면 `submissions/`) | `<Drive>/repro_private/` | 2,053,698,560 | `0f41a8e4a10dd1b5c81ac02b8fd51f0b5a7181ef2fe60e74982d90cb73acbc3b` | 93 이후를 똑같이 재조립할 수 없음. 개별 해시는 `submissions/SHA256SUMS.md` |
 | `112_submit.zip` | `<Drive>/combo_kit/` | 46,423,599 | `d8dd29d27b95429b7b949471ef19435fdf6eaed6c5b84eac689466f2210fce3f` | 아래 2단계로 재학습 |
 | `v20.zip` | `<Drive>/combo_kit/` | 6,976,909,920 | 미기록 | **재학습 코드가 이 Mac과 레포에 없음** (아래 한계 참고) |
 | `1031_08_hyb_w.zip` (HanSunwook) | `<Drive>/combo_kit/` | 7,237,515 | `e8361118ef075f87d1a4749d6a2b3d416fc1f6c78bdbd92fc104cb36187b2eab` | 외부 레포에서 재구성 필요 |
